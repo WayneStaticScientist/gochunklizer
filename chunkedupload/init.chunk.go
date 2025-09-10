@@ -1,4 +1,4 @@
-package chuckedupload
+package chunkedupload
 
 import "github.com/gofiber/fiber/v2"
 
