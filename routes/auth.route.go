@@ -8,4 +8,5 @@ import (
 func HandleRoutes(app *fiber.App) {
 	chunkUpload := chunkedupload.InitChunkUploader()
 	app.Post("/v1/chunk/upload", chunkUpload.Upload)
+	go chunkUpload.Work()
 }

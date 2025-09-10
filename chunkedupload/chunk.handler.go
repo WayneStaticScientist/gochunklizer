@@ -18,15 +18,17 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 	}
 	chunkIndex, errIndex := strconv.Atoi(c.FormValue("index"))
 	if errIndex != nil {
+
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid chunk index")
 	}
 	totalChunks, errtotal := strconv.Atoi(c.FormValue("totalChunks"))
 	if errtotal != nil {
+		log.Println(errtotal.Error())
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid chunk index")
 	}
 	fileName := c.FormValue("fileName")
-	chunkCachedData, ok := chunkCache[fileName]
-	if !ok {
+
+	if _, ok := chunkCache[fileName]; !ok {
 		uploadDir := "./uploads"
 		if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
 			fmt.Printf("Failed to create upload directory: %v\n", err)
@@ -39,12 +41,11 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 			ChunkPath:    tempFilePath,
 			Step:         0,
 		}
-		//user verification here
 	}
 	if chunkCache[fileName].CurrentIndex != int64(chunkIndex) {
 		return c.Status(fiber.StatusBadRequest).SendString("Chunk index mismatch")
 	}
-
+	log.Println("File is >>>>> ", chunkCache[fileName].ChunkPath)
 	f, err := os.OpenFile(chunkCache[fileName].ChunkPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Println(err.Error())
@@ -59,15 +60,19 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 	defer chunkData.Close()
 	_, err = f.ReadFrom(chunkData)
 	if err != nil {
+		log.Println(err.Error())
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
 	}
-
-	updatedChunkCache := chunkCachedData
+	updatedChunkCache := chunkCache[fileName]
 	if chunkIndex == totalChunks-1 {
-		updatedChunkCache.Step = 1
+		chunkChan <- updatedChunkCache
+		delete(chunkCache, fileName)
+		return c.JSON(fiber.Map{"message": "File uploaded successfully", "progress": 1})
 	}
-	updatedChunkCache.CurrentIndex = chunkCachedData.CurrentIndex + 1
+	updatedChunkCache.ChunkPath = chunkCache[fileName].ChunkPath
+	updatedChunkCache.TotalChunks = chunkCache[fileName].TotalChunks
+	updatedChunkCache.CurrentIndex = chunkCache[fileName].CurrentIndex + 1
 	chunkCache[fileName] = updatedChunkCache
-	chunkIndex++
+	log.Println("The file name is ", chunkCache[fileName].ChunkPath)
 	return c.JSON(fiber.Map{"message": "File uploaded successfully", "progress": chunkIndex / totalChunks})
 }
