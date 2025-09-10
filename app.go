@@ -16,7 +16,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	app.Use(cors.New())
+	app.Use(cors.New(cors.Config{
+		AllowHeaders: "Origin, Content-Type, Accept, X-User-Id, X-Upload-Id",
+	}))
+
 	app.Use(logger.New())
 	routes.HandleRoutes(app)
 	app.Listen(":5142")
