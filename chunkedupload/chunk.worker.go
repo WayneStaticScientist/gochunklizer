@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -25,7 +26,7 @@ func (chunk *ChunkUploader) CleanUpTemp() {
 		time.Sleep(time.Minute * 30)
 		chunkCacheMutex.Lock()
 		for k, v := range chunkCache {
-			if (v.LastAccess - time.Now().Unix()) > 300 {
+			if (time.Now().Unix() - v.LastAccess) > 300 {
 				os.Remove(v.ChunkPath)
 				delete(chunkCache, k)
 			}
@@ -42,7 +43,7 @@ func (chunk *ChunkUploader) Work() {
 
 func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	accountID := os.Getenv("CACCOUNT_ID")
-	bucketName := "pictures"
+	bucketName := getBucketName(strings.ToLower(chunk.FileName))
 	accessKeyID := os.Getenv("R2_ACCESS_KEY_ID")
 	secretAccessKey := os.Getenv("R2_SECRET_ACCESS_KEY")
 	filePath := chunk.ChunkPath
@@ -94,4 +95,15 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 		log.Printf("Successfully deleted local file %s", filePath)
 	}
 
+}
+
+func getBucketName(s string) string {
+	if strings.HasSuffix(s, ".png") || strings.HasSuffix(s, ".jpg") || strings.HasSuffix(s, ".jpeg") || strings.HasSuffix(s, ".gif") {
+		return "images"
+	}
+
+	if strings.HasSuffix(s, ".mp4") || strings.HasSuffix(s, ".mov") || strings.HasSuffix(s, ".avi") || strings.HasSuffix(s, ".webm") || strings.HasSuffix(s, ".mkv") {
+		return "videos"
+	}
+	return "documents"
 }
