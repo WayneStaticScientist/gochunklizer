@@ -18,7 +18,6 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 	}
 	chunkIndex, errIndex := strconv.Atoi(c.FormValue("index"))
 	if errIndex != nil {
-
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid chunk index")
 	}
 	totalChunks, errtotal := strconv.Atoi(c.FormValue("totalChunks"))
@@ -45,22 +44,18 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 	if chunkCache[fileName].CurrentIndex != int64(chunkIndex) {
 		return c.Status(fiber.StatusBadRequest).SendString("Chunk index mismatch")
 	}
-	log.Println("File is >>>>> ", chunkCache[fileName].ChunkPath)
 	f, err := os.OpenFile(chunkCache[fileName].ChunkPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Println(err.Error())
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
 	}
 	defer f.Close()
 	chunkData, err := fileChunk.Open()
 	if err != nil {
-		log.Println(err.Error())
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
 	}
 	defer chunkData.Close()
 	_, err = f.ReadFrom(chunkData)
 	if err != nil {
-		log.Println(err.Error())
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
 	}
 	updatedChunkCache := chunkCache[fileName]
@@ -73,6 +68,5 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 	updatedChunkCache.TotalChunks = chunkCache[fileName].TotalChunks
 	updatedChunkCache.CurrentIndex = chunkCache[fileName].CurrentIndex + 1
 	chunkCache[fileName] = updatedChunkCache
-	log.Println("The file name is ", chunkCache[fileName].ChunkPath)
 	return c.JSON(fiber.Map{"message": "File uploaded successfully", "progress": chunkIndex / totalChunks})
 }

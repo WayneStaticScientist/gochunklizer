@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/gofiber/fiber/v2"
 	"opechains.shop/chunklizer/v2/types"
 )
 
@@ -46,7 +47,6 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 		log.Fatalf("Failed to load SDK configuration: %v", err)
 	}
 
-	// Create a new S3 client and directly provide the R2 endpoint.
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID))
 	})
@@ -71,10 +71,46 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 		Bucket:      aws.String(bucketName),
 		Key:         aws.String(objectKey),
 		Body:        fileReader.reader,
-		ContentType: aws.String("application/octet-stream"), // Set the correct MIME type
+		ContentType: aws.String("application/octet-stream"),
 	})
 	if err != nil {
 		log.Fatalf("failed to upload object, %v", err)
 	}
 	log.Println("File uploaded successfully!")
+}
+
+func (c *ChunkUploader) RequestDeleteFile(ctx *fiber.Ctx) error {
+	accountID := os.Getenv("R2_ACCOUNT_ID")
+	bucketName := os.Getenv("R2_BUCKET_NAME")
+	accessKeyID := os.Getenv("R2_ACCESS_KEY_ID")
+	secretAccessKey := os.Getenv("R2_SECRET_ACCESS_KEY")
+
+	if accountID == "" || bucketName == "" || accessKeyID == "" || secretAccessKey == "" {
+		log.Fatal("Error: Missing R2 environment variables. Please check your .env file or system settings.")
+	}
+
+	objectKey := "uploaded-file.jpg"
+
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion("auto"),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, "")),
+	)
+	if err != nil {
+		log.Fatalf("Failed to load SDK configuration: %v", err)
+	}
+	// 4. Create a new S3 client and directly provide the R2 endpoint.
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID))
+	})
+	_, err = client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(objectKey),
+	})
+
+	if err != nil {
+		log.Fatalf("Failed to delete object: %v", err)
+	}
+
+	log.Println("Object deleted successfully! 🗑️")
+	return nil
 }
