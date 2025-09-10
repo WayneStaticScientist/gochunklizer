@@ -2,6 +2,7 @@ package chunkedupload
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -26,30 +27,47 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 	fileName := c.FormValue("fileName")
 	chunkCachedData, ok := chunkCache[fileName]
 	if !ok {
+		uploadDir := "./uploads"
+		if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+			fmt.Printf("Failed to create upload directory: %v\n", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Failed to upload file"})
+		}
+		tempFilePath := fmt.Sprintf("./uploads/temp_%s", strings.ReplaceAll(fileName, " ", "_"))
 		chunkCache[fileName] = types.ChunkCache{
 			CurrentIndex: int64(chunkIndex),
 			TotalChunks:  int64(totalChunks),
+			ChunkPath:    tempFilePath,
+			Step:         0,
 		}
 		//user verification here
 	}
-	if chunkCachedData.CurrentIndex != int64(chunkIndex) {
+	if chunkCache[fileName].CurrentIndex != int64(chunkIndex) {
 		return c.Status(fiber.StatusBadRequest).SendString("Chunk index mismatch")
 	}
-	tempFilePath := fmt.Sprintf("./uploads/temp_%s", strings.ReplaceAll(fileName, " ", "_"))
-	f, err := os.OpenFile(tempFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+	f, err := os.OpenFile(chunkCache[fileName].ChunkPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+		log.Println(err.Error())
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
 	}
 	defer f.Close()
 	chunkData, err := fileChunk.Open()
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+		log.Println(err.Error())
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
 	}
 	defer chunkData.Close()
 	_, err = f.ReadFrom(chunkData)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
 	}
-	return c.JSON(fiber.Map{"message": "File uploaded successfully", "progress": chunkIndex / totalChunks})
 
+	updatedChunkCache := chunkCachedData
+	if chunkIndex == totalChunks-1 {
+		updatedChunkCache.Step = 1
+	}
+	updatedChunkCache.CurrentIndex = chunkCachedData.CurrentIndex + 1
+	chunkCache[fileName] = updatedChunkCache
+	chunkIndex++
+	return c.JSON(fiber.Map{"message": "File uploaded successfully", "progress": chunkIndex / totalChunks})
 }
