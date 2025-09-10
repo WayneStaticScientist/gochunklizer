@@ -5,4 +5,10 @@ type ChunkCache struct {
 	TotalChunks  int64
 	Step         int64
 	ChunkPath    string
+	FileName     string
+	FileType     string
+	LastAccess   int64
+}
+type UploadMetaDataFile struct {
+	FileProvider string `json:"fileProvider"`
 }

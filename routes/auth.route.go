@@ -10,4 +10,5 @@ func HandleRoutes(app *fiber.App) {
 	app.Post("/v1/chunk/upload", chunkUpload.Upload)
 	app.Post("/v1/chunk/delete", chunkUpload.RequestDeleteFile)
 	go chunkUpload.Work()
+	go chunkUpload.CleanUpTemp()
 }

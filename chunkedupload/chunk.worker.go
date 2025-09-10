@@ -6,18 +6,32 @@ import (
 	"io"
 	"log"
 	"os"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/gofiber/fiber/v2"
 	"opechains.shop/chunklizer/v2/types"
 )
 
 type fileWithProgress struct {
 	reader io.Reader
 	size   int64
+}
+
+func (chunk *ChunkUploader) CleanUpTemp() {
+	for {
+		time.Sleep(time.Minute * 30)
+		chunkCacheMutex.Lock()
+		for k, v := range chunkCache {
+			if (v.LastAccess - time.Now().Unix()) > 300 {
+				os.Remove(v.ChunkPath)
+				delete(chunkCache, k)
+			}
+		}
+		chunkCacheMutex.Unlock()
+	}
 }
 
 func (chunk *ChunkUploader) Work() {
@@ -28,13 +42,10 @@ func (chunk *ChunkUploader) Work() {
 
 func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	accountID := os.Getenv("CACCOUNT_ID")
-
 	bucketName := "pictures"
 	accessKeyID := os.Getenv("R2_ACCESS_KEY_ID")
 	secretAccessKey := os.Getenv("R2_SECRET_ACCESS_KEY")
 	filePath := chunk.ChunkPath
-	objectKey := "uploaded_file.zip"
-
 	if accountID == "" || bucketName == "" || accessKeyID == "" || secretAccessKey == "" {
 		log.Fatal("Error: Missing R2 environment variables.")
 	}
@@ -66,51 +77,21 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 		size:   fileInfo.Size(),
 	}
 
-	log.Printf("Uploading file: %s to bucket: %s\n", filePath, bucketName)
 	_, err = client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket:      aws.String(bucketName),
-		Key:         aws.String(objectKey),
 		Body:        fileReader.reader,
+		Bucket:      aws.String(bucketName),
+		Key:         aws.String(chunk.FileName),
 		ContentType: aws.String("application/octet-stream"),
 	})
 	if err != nil {
 		log.Fatalf("failed to upload object, %v", err)
 	}
 	log.Println("File uploaded successfully!")
-}
-
-func (c *ChunkUploader) RequestDeleteFile(ctx *fiber.Ctx) error {
-	accountID := os.Getenv("R2_ACCOUNT_ID")
-	bucketName := os.Getenv("R2_BUCKET_NAME")
-	accessKeyID := os.Getenv("R2_ACCESS_KEY_ID")
-	secretAccessKey := os.Getenv("R2_SECRET_ACCESS_KEY")
-
-	if accountID == "" || bucketName == "" || accessKeyID == "" || secretAccessKey == "" {
-		log.Fatal("Error: Missing R2 environment variables. Please check your .env file or system settings.")
-	}
-
-	objectKey := "uploaded-file.jpg"
-
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion("auto"),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, "")),
-	)
+	err = os.Remove(filePath)
 	if err != nil {
-		log.Fatalf("Failed to load SDK configuration: %v", err)
-	}
-	// 4. Create a new S3 client and directly provide the R2 endpoint.
-	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID))
-	})
-	_, err = client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(objectKey),
-	})
-
-	if err != nil {
-		log.Fatalf("Failed to delete object: %v", err)
+		log.Printf("Failed to delete local file %s: %v", filePath, err)
+	} else {
+		log.Printf("Successfully deleted local file %s", filePath)
 	}
 
-	log.Println("Object deleted successfully! 🗑️")
-	return nil
 }
