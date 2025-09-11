@@ -1,10 +1,13 @@
 package chunkedupload
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -43,9 +46,9 @@ func (chunk *ChunkUploader) Work() {
 
 func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	accountID := os.Getenv("CACCOUNT_ID")
-	bucketName := getBucketName(strings.ToLower(chunk.FileName))
 	accessKeyID := os.Getenv("R2_ACCESS_KEY_ID")
 	secretAccessKey := os.Getenv("R2_SECRET_ACCESS_KEY")
+	bucketName, bucketPublicPath := getBucketName(strings.ToLower(chunk.FileName))
 	filePath := chunk.ChunkPath
 	if accountID == "" || bucketName == "" || accessKeyID == "" || secretAccessKey == "" {
 		log.Fatal("Error: Missing R2 environment variables.")
@@ -87,23 +90,70 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	if err != nil {
 		log.Fatalf("failed to upload object, %v", err)
 	}
-	log.Println("File uploaded successfully!")
 	err = os.Remove(filePath)
 	if err != nil {
 		log.Printf("Failed to delete local file %s: %v", filePath, err)
 	} else {
 		log.Printf("Successfully deleted local file %s", filePath)
 	}
-
+	trials := 0
+	for {
+		err := handShakeServer(chunk.Token, fmt.Sprintf("%s/%s", bucketPublicPath, chunk.FileName), chunk.FileName)
+		if err == nil {
+			break
+		}
+		trials++
+		if trials > 10 {
+			log.Println("Project with name ", chunk.FileName, "failed to upload")
+			break
+		}
+	}
+	os.Remove(chunk.ChunkPath)
 }
 
-func getBucketName(s string) string {
+func getBucketName(s string) (string, string) {
 	if strings.HasSuffix(s, ".png") || strings.HasSuffix(s, ".jpg") || strings.HasSuffix(s, ".jpeg") || strings.HasSuffix(s, ".gif") {
-		return "images"
+		return "images", os.Getenv("PICTURES_PUBLIC_URL")
 	}
 
 	if strings.HasSuffix(s, ".mp4") || strings.HasSuffix(s, ".mov") || strings.HasSuffix(s, ".avi") || strings.HasSuffix(s, ".webm") || strings.HasSuffix(s, ".mkv") {
-		return "videos"
+		return "videos", os.Getenv("VIDEOS_PUBLIC_URL")
 	}
-	return "documents"
+	return "documents", os.Getenv("DOCUMENTS_PUBLIC_URL")
+}
+
+func handShakeServer(token string, coverUrl string, objectId string) error {
+	userData := map[string]string{
+		"cover":    coverUrl,
+		"objectId": objectId,
+	}
+
+	jsonData, err := json.Marshal(userData)
+	if err != nil {
+		log.Printf("Error marshaling JSON: %s\n", err)
+		return err
+	}
+	req, err := http.NewRequest("POST", os.Getenv("NEXT_PUBLIC_API_URL")+"/utils/files?t="+token, bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Error marshaling JSON: %s\n", err)
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error sending request: %s", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("received non-201 status code: %d", resp.StatusCode)
+		return fmt.Errorf("received non-201 status code: %d", resp.StatusCode)
+	}
+	log.Println("Uploaded to server successfully: ", coverUrl)
+	return nil
 }

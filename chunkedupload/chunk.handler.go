@@ -15,12 +15,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gofiber/fiber/v2"
 	"opechains.shop/chunklizer/v2/types"
+	"opechains.shop/chunklizer/v2/user"
 )
 
+// ->[post] /utils/files?t=
 func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
-	userId := c.Get("X-User-Id")
+	objectId := c.Get("X-Object-Id")
 	userToken := c.Get("X-Upload-Id")
-	if strings.Trim(userToken, " ") == "" || strings.Trim(userId, " ") == "" {
+	objectType := c.Get("X-Object-Type")
+	if strings.Trim(userToken, " ") == "" || strings.Trim(objectId, " ") == "" ||
+		strings.Trim(objectType, " ") == "" {
 		return c.Status(fiber.StatusUnauthorized).SendString("Unauthorized")
 	}
 	fileChunk, err := c.FormFile("chunk")
@@ -42,8 +46,11 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid File Type")
 	}
 	if _, ok := chunkCache[userToken]; !ok {
+		if err := user.VerifyToken(objectId); err != nil {
+			return c.Status(fiber.StatusUnauthorized).SendString(err.Error())
+		}
 		baseOnCurrentTime := strconv.FormatInt(c.Context().Time().Unix(), 10)
-		uploadDir := fmt.Sprintf("./uploads/temp/%s/%s", baseOnCurrentTime, userId)
+		uploadDir := fmt.Sprintf("./uploads/temp/%s/%s", baseOnCurrentTime, objectId)
 		if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
 			fmt.Printf("Failed to create upload directory: %v\n", err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Failed to upload file"})
@@ -60,6 +67,7 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 			Step:         0,
 			FileName:     fileName,
 			FileType:     fileType,
+			Token:        userToken,
 			ChunkPath:    tempFilePath,
 			LastAccess:   time.Now().Unix(),
 			CurrentIndex: int64(chunkIndex),

@@ -6,9 +6,9 @@ import (
 	"opechains.shop/chunklizer/v2/types"
 )
 
+var chunkCacheMutex sync.RWMutex
 var chunkChan = make(chan types.ChunkCache)
 var chunkCache = make(map[string]types.ChunkCache)
-var chunkCacheMutex sync.RWMutex
 
 type ChunkUploader struct {
 }
@@ -16,3 +16,5 @@ type ChunkUploader struct {
 func InitChunkUploader() ChunkUploader {
 	return ChunkUploader{}
 }
+
+// /verifyToken /user/verifyToken?t=

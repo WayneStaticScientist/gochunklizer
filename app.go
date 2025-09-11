@@ -17,7 +17,7 @@ func main() {
 		log.Fatal(err)
 	}
 	app.Use(cors.New(cors.Config{
-		AllowHeaders: "Origin, Content-Type, Accept, X-User-Id, X-Upload-Id",
+		AllowHeaders: "Origin, Content-Type, Accept, X-Object-Type, X-Upload-Id,X-Object-Id",
 	}))
 
 	app.Use(logger.New())
