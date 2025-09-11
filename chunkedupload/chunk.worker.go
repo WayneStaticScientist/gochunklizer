@@ -98,7 +98,7 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	}
 	trials := 0
 	for {
-		err := handShakeServer(chunk.Token, fmt.Sprintf("%s/%s", bucketPublicPath, chunk.FileName), chunk.FileName)
+		err := handShakeServer(chunk.Token, fmt.Sprintf("%s%s", bucketPublicPath, chunk.FileName), chunk.FileName)
 		if err == nil {
 			break
 		}
@@ -113,7 +113,7 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 
 func getBucketName(s string) (string, string) {
 	if strings.HasSuffix(s, ".png") || strings.HasSuffix(s, ".jpg") || strings.HasSuffix(s, ".jpeg") || strings.HasSuffix(s, ".gif") {
-		return "images", os.Getenv("PICTURES_PUBLIC_URL")
+		return "pictures", os.Getenv("PICTURES_PUBLIC_URL")
 	}
 
 	if strings.HasSuffix(s, ".mp4") || strings.HasSuffix(s, ".mov") || strings.HasSuffix(s, ".avi") || strings.HasSuffix(s, ".webm") || strings.HasSuffix(s, ".mkv") {
@@ -123,8 +123,8 @@ func getBucketName(s string) (string, string) {
 }
 
 func handShakeServer(token string, coverUrl string, objectId string) error {
-	userData := map[string]string{
-		"cover":    coverUrl,
+	userData := map[string]any{
+		"media":    coverUrl,
 		"objectId": objectId,
 	}
 

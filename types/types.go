@@ -9,6 +9,7 @@ type ChunkCache struct {
 	FileType     string
 	LastAccess   int64
 	Token        string
+	ObjectId     string
 }
 type UploadMetaDataFile struct {
 	FileProvider string `json:"fileProvider"`

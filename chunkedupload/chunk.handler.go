@@ -22,9 +22,7 @@ import (
 func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 	objectId := c.Get("X-Object-Id")
 	userToken := c.Get("X-Upload-Id")
-	objectType := c.Get("X-Object-Type")
-	if strings.Trim(userToken, " ") == "" || strings.Trim(objectId, " ") == "" ||
-		strings.Trim(objectType, " ") == "" {
+	if strings.Trim(userToken, " ") == "" || strings.Trim(objectId, " ") == "" {
 		return c.Status(fiber.StatusUnauthorized).SendString("Unauthorized")
 	}
 	fileChunk, err := c.FormFile("chunk")
@@ -46,7 +44,8 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid File Type")
 	}
 	if _, ok := chunkCache[userToken]; !ok {
-		if err := user.VerifyToken(objectId); err != nil {
+		if err := user.VerifyToken(userToken); err != nil {
+			log.Println("Error from third server ", err.Error())
 			return c.Status(fiber.StatusUnauthorized).SendString(err.Error())
 		}
 		baseOnCurrentTime := strconv.FormatInt(c.Context().Time().Unix(), 10)
@@ -67,6 +66,7 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 			Step:         0,
 			FileName:     fileName,
 			FileType:     fileType,
+			ObjectId:     objectId,
 			Token:        userToken,
 			ChunkPath:    tempFilePath,
 			LastAccess:   time.Now().Unix(),
