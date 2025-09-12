@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -18,11 +17,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"opechains.shop/chunklizer/v2/types"
 )
-
-type fileWithProgress struct {
-	reader io.Reader
-	size   int64
-}
 
 func (chunk *ChunkUploader) CleanUpTemp() {
 	for {
@@ -48,7 +42,7 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	accountID := os.Getenv("CACCOUNT_ID")
 	accessKeyID := os.Getenv("R2_ACCESS_KEY_ID")
 	secretAccessKey := os.Getenv("R2_SECRET_ACCESS_KEY")
-	bucketName, bucketPublicPath := getBucketName(strings.ToLower(chunk.FileName))
+	bucketName := getBucketName(strings.ToLower(chunk.FileName))
 	filePath := chunk.ChunkPath
 	chunk.FileName = fmt.Sprintf("%s_%s", chunk.ObjectId, chunk.FileName)
 	if accountID == "" || bucketName == "" || accessKeyID == "" || secretAccessKey == "" {
@@ -70,26 +64,16 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	if err != nil {
 		log.Fatalf("failed to open file, %v", err)
 	}
-
-	fileInfo, err := file.Stat()
-	if err != nil {
-		log.Fatalf("failed to get file info, %v", err)
-	}
-
-	fileReader := &fileWithProgress{
-		reader: file,
-		size:   fileInfo.Size(),
-	}
-
 	_, err = client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Body:        fileReader.reader,
-		Bucket:      aws.String(bucketName),
-		Key:         aws.String(chunk.FileName),
+		Body:        file,
+		Bucket:      aws.String("assets"),
+		Key:         aws.String(fmt.Sprintf("%s%s", bucketName, chunk.FileName)),
 		ContentType: aws.String("application/octet-stream"),
 	})
 	if err != nil {
 		log.Fatalf("failed to upload object, %v", err)
 	}
+	file.Close()
 	err = os.Remove(filePath)
 	if err != nil {
 		log.Printf("Failed to delete local file %s: %v", filePath, err)
@@ -97,9 +81,8 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 		log.Printf("Successfully deleted local file %s", filePath)
 	}
 	trials := 0
-	file.Close()
 	for {
-		err := handShakeServer(chunk.Token, fmt.Sprintf("%s%s", bucketPublicPath, chunk.FileName), chunk.ObjectId, chunk.FileName)
+		err := handShakeServer(chunk.Token, fmt.Sprintf("%s%s", bucketName, chunk.FileName), chunk.ObjectId, chunk.FileName)
 		if err == nil {
 			break
 		}
@@ -112,15 +95,14 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	os.Remove(chunk.ChunkPath)
 }
 
-func getBucketName(s string) (string, string) {
+func getBucketName(s string) string {
 	if strings.HasSuffix(s, ".png") || strings.HasSuffix(s, ".jpg") || strings.HasSuffix(s, ".jpeg") || strings.HasSuffix(s, ".gif") {
-		return "pictures", os.Getenv("PICTURES_PUBLIC_URL")
+		return "images/"
 	}
-
 	if strings.HasSuffix(s, ".mp4") || strings.HasSuffix(s, ".mov") || strings.HasSuffix(s, ".avi") || strings.HasSuffix(s, ".webm") || strings.HasSuffix(s, ".mkv") {
-		return "videos", os.Getenv("VIDEOS_PUBLIC_URL")
+		return "videos/"
 	}
-	return "documents", os.Getenv("DOCUMENTS_PUBLIC_URL")
+	return "documents/"
 }
 
 func handShakeServer(token string, coverUrl string, objectId string, objectKey string) error {
@@ -158,4 +140,26 @@ func handShakeServer(token string, coverUrl string, objectId string, objectKey s
 	}
 	log.Println("Uploaded to server successfully: ", coverUrl)
 	return nil
+}
+
+func (chunk *ChunkUploader) DeleteFromCloud(ctx context.Context, key string) error {
+	accountID := os.Getenv("R2_ACCOUNT_ID")
+	accessKeyID := os.Getenv("R2_ACCESS_KEY_ID")
+	secretAccessKey := os.Getenv("R2_SECRET_ACCESS_KEY")
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion("auto"),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, "")),
+	)
+	if err != nil {
+		log.Printf("Failed to load SDK configuration: %v", err)
+		return fmt.Errorf("failed to load data")
+	}
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID))
+	})
+	_, err = client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
+		Bucket: aws.String(os.Getenv("ASSETS_BUCKET_KEY")),
+		Key:    aws.String(key),
+	})
+	return err
 }
