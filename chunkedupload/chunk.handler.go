@@ -106,6 +106,11 @@ func (chuck *ChunkUploader) Upload(c *fiber.Ctx) error {
 }
 
 func (c *ChunkUploader) RequestDeleteFile(ctx *fiber.Ctx) error {
+	objectKey := ctx.Get("X-Object-Key", "")
+
+	if os.Getenv("S2S_API_KEY") != ctx.Get("Authorization") {
+		return ctx.Status(fiber.StatusUnauthorized).SendString("Unauthorized")
+	}
 	accountID := os.Getenv("R2_ACCOUNT_ID")
 	bucketName := os.Getenv("R2_BUCKET_NAME")
 	accessKeyID := os.Getenv("R2_ACCESS_KEY_ID")
@@ -114,15 +119,15 @@ func (c *ChunkUploader) RequestDeleteFile(ctx *fiber.Ctx) error {
 	if accountID == "" || bucketName == "" || accessKeyID == "" || secretAccessKey == "" {
 		log.Fatal("Error: Missing R2 environment variables. Please check your .env file or system settings.")
 	}
-
-	objectKey := "uploaded-file.jpg"
-
+	if strings.Trim(objectKey, " ") == "" {
+		return ctx.Status(fiber.StatusBadRequest).SendString("Invalid object key")
+	}
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("auto"),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, "")),
 	)
 	if err != nil {
-		log.Fatalf("Failed to load SDK configuration: %v", err)
+		log.Printf("Failed to load SDK configuration: %v", err)
 	}
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID))
@@ -131,11 +136,9 @@ func (c *ChunkUploader) RequestDeleteFile(ctx *fiber.Ctx) error {
 		Bucket: aws.String(bucketName),
 		Key:    aws.String(objectKey),
 	})
-
 	if err != nil {
-		log.Fatalf("Failed to delete object: %v", err)
+		log.Printf("Failed to delete object: %v", err)
 	}
-
 	log.Println("Object deleted successfully! 🗑️")
 	return nil
 }

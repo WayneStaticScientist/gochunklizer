@@ -50,6 +50,7 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	secretAccessKey := os.Getenv("R2_SECRET_ACCESS_KEY")
 	bucketName, bucketPublicPath := getBucketName(strings.ToLower(chunk.FileName))
 	filePath := chunk.ChunkPath
+	chunk.FileName = fmt.Sprintf("%s_%s", chunk.ObjectId, chunk.FileName)
 	if accountID == "" || bucketName == "" || accessKeyID == "" || secretAccessKey == "" {
 		log.Fatal("Error: Missing R2 environment variables.")
 	}
@@ -69,7 +70,6 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	if err != nil {
 		log.Fatalf("failed to open file, %v", err)
 	}
-	defer file.Close()
 
 	fileInfo, err := file.Stat()
 	if err != nil {
@@ -97,8 +97,9 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 		log.Printf("Successfully deleted local file %s", filePath)
 	}
 	trials := 0
+	file.Close()
 	for {
-		err := handShakeServer(chunk.Token, fmt.Sprintf("%s%s", bucketPublicPath, chunk.FileName), chunk.FileName)
+		err := handShakeServer(chunk.Token, fmt.Sprintf("%s%s", bucketPublicPath, chunk.FileName), chunk.ObjectId, chunk.FileName)
 		if err == nil {
 			break
 		}
@@ -122,10 +123,11 @@ func getBucketName(s string) (string, string) {
 	return "documents", os.Getenv("DOCUMENTS_PUBLIC_URL")
 }
 
-func handShakeServer(token string, coverUrl string, objectId string) error {
+func handShakeServer(token string, coverUrl string, objectId string, objectKey string) error {
 	userData := map[string]any{
 		"media":    coverUrl,
 		"objectId": objectId,
+		"key":      objectKey,
 	}
 
 	jsonData, err := json.Marshal(userData)
