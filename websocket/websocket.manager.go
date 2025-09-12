@@ -3,8 +3,10 @@ package websocket
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/doquangtan/socketio/v4"
+	"opechains.shop/chunklizer/v2/types"
 )
 
 type WebSocketManager struct {
@@ -39,6 +41,12 @@ func (wsManager *WebSocketManager) NewUserConnection(s *socketio.Socket) {
 			return
 		}
 		s.Join(user)
+		log.Println("user connected:", user)
+		s.To(user).Emit("chunk:start", types.SocketChunckMessage{
+			IsSuccess: false,
+			Message:   "hello world",
+			HasError:  false,
+			Data:      ""})
 	})
 
 }

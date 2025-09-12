@@ -22,7 +22,7 @@ type UploadMetaDataFile struct {
 }
 type SocketChunckMessage struct {
 	Data      any     `json:"data"`
-	HasError  bool    `json:"hasError"`
+	HasError  bool    `json:"isError"`
 	Message   string  `json:"message"`
 	Progress  float64 `json:"progress"`
 	IsSuccess bool    `json:"isSuccess"`

@@ -115,6 +115,7 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 				Progress:  1,
 				IsSuccess: true,
 			})
+			log.Println("Project with name ", chunk.FileName, "uploaded successfully --- token \n\n", chunk.Token)
 			break
 		}
 		trials++
