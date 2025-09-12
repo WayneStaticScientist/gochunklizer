@@ -34,7 +34,7 @@ func (chunk *ChunkUploader) CleanUpTemp() {
 
 func (chunk *ChunkUploader) Work() {
 	for v := range chunkChan {
-		chunk.UploadToCloud(v)
+		go chunk.UploadToCloud(v)
 	}
 }
 
@@ -46,6 +46,10 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	filePath := chunk.ChunkPath
 	chunk.FileName = fmt.Sprintf("%s_%s", chunk.ObjectId, chunk.FileName)
 	if accountID == "" || bucketName == "" || accessKeyID == "" || secretAccessKey == "" {
+		c.Socket.Io.To(chunk.Token).Emit("chunk:events", types.SocketChunckMessage{
+			HasError: true,
+			Message:  "There was internal server error in uploading file code [0]",
+		})
 		log.Fatal("Error: Missing R2 environment variables.")
 	}
 
@@ -54,6 +58,10 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, "")),
 	)
 	if err != nil {
+		c.Socket.Io.To(chunk.Token).Emit("chunk:events", types.SocketChunckMessage{
+			HasError: true,
+			Message:  "There was internal server error in uploading file code [1]",
+		})
 		log.Fatalf("Failed to load SDK configuration: %v", err)
 	}
 
@@ -62,7 +70,12 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	})
 	file, err := os.Open(filePath)
 	if err != nil {
-		log.Fatalf("failed to open file, %v", err)
+		c.Socket.Io.To(chunk.Token).Emit("chunk:events", types.SocketChunckMessage{
+			HasError: true,
+			Message:  "There was error uploading file code [2]",
+		})
+		log.Printf("failed to open file, %v", err)
+		os.Remove(filePath)
 	}
 	_, err = client.PutObject(context.TODO(), &s3.PutObjectInput{
 		Body:        file,
@@ -71,7 +84,12 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 		ContentType: aws.String("application/octet-stream"),
 	})
 	if err != nil {
-		log.Fatalf("failed to upload object, %v", err)
+		log.Printf("failed to upload object, %v", err)
+		c.Socket.Io.To(chunk.Token).Emit("chunk:events", types.SocketChunckMessage{
+			HasError: true,
+			Message:  "There was error uploading file code [2]",
+		})
+		os.Remove(filePath)
 	}
 	file.Close()
 	err = os.Remove(filePath)
@@ -82,13 +100,32 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 	}
 	trials := 0
 	for {
-		err := handShakeServer(chunk.Token, fmt.Sprintf("%s%s", bucketName, chunk.FileName), chunk.ObjectId, chunk.FileName)
+		userData := map[string]any{
+			"media":    fmt.Sprintf("%s%s", bucketName, chunk.FileName),
+			"objectId": chunk.ObjectId,
+			"name":     chunk.FileName,
+			"key":      fmt.Sprintf("%s%s", bucketName, chunk.FileName),
+		}
+		err := handShakeServer(userData, chunk.Token)
 		if err == nil {
+			c.Socket.Io.To(chunk.Token).Emit("chunk:events", types.SocketChunckMessage{
+				HasError:  false,
+				Data:      userData,
+				Message:   "File uploaded successfully",
+				Progress:  1,
+				IsSuccess: true,
+			})
 			break
 		}
 		trials++
 		if trials > 10 {
 			log.Println("Project with name ", chunk.FileName, "failed to upload")
+			c.Socket.Io.To(chunk.Token).Emit("chunk:events", types.SocketChunckMessage{
+				HasError:  true,
+				Message:   "Project failed to communicate with gateway",
+				Progress:  1,
+				IsSuccess: false,
+			})
 			break
 		}
 	}
@@ -105,12 +142,7 @@ func getBucketName(s string) string {
 	return "documents/"
 }
 
-func handShakeServer(token string, coverUrl string, objectId string, objectKey string) error {
-	userData := map[string]any{
-		"media":    coverUrl,
-		"objectId": objectId,
-		"key":      objectKey,
-	}
+func handShakeServer(userData any, token string) error {
 
 	jsonData, err := json.Marshal(userData)
 	if err != nil {
@@ -138,7 +170,6 @@ func handShakeServer(token string, coverUrl string, objectId string, objectKey s
 		log.Printf("received non-201 status code: %d", resp.StatusCode)
 		return fmt.Errorf("received non-201 status code: %d", resp.StatusCode)
 	}
-	log.Println("Uploaded to server successfully: ", coverUrl)
 	return nil
 }
 

@@ -19,7 +19,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
 )
 
 require (
@@ -46,4 +46,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.8.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.7 // indirect
+	github.com/doquangtan/socketio/v4 v4.1.5
+	github.com/fasthttp/websocket v1.5.3 // indirect
+	github.com/gofiber/websocket/v2 v2.2.1 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/savsgio/gotils v0.0.0-20230208104028-c358bd845dee // indirect
 )
