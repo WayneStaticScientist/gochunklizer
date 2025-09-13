@@ -50,7 +50,9 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 			HasError: true,
 			Message:  "There was internal server error in uploading file code [0]",
 		})
-		log.Fatal("Error: Missing R2 environment variables.")
+		log.Println("Error: Missing R2 environment variables.")
+		os.RemoveAll(chunk.ChunkPath)
+		return
 	}
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
@@ -62,7 +64,9 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 			HasError: true,
 			Message:  "There was internal server error in uploading file code [1]",
 		})
-		log.Fatalf("Failed to load SDK configuration: %v", err)
+		log.Printf("Failed to load SDK configuration: %v", err)
+		os.RemoveAll(chunk.ChunkPath)
+		return
 	}
 
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
@@ -75,7 +79,8 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 			Message:  "There was error uploading file code [2]",
 		})
 		log.Printf("failed to open file, %v", err)
-		os.Remove(filePath)
+		os.RemoveAll(chunk.ChunkPath)
+		return
 	}
 	_, err = client.PutObject(context.TODO(), &s3.PutObjectInput{
 		Body:        file,
@@ -89,10 +94,11 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 			HasError: true,
 			Message:  "There was error uploading file code [2]",
 		})
-		os.Remove(filePath)
+		os.RemoveAll(chunk.ChunkPath)
+		return
 	}
 	file.Close()
-	err = os.Remove(filePath)
+	err = os.RemoveAll(filePath)
 	if err != nil {
 		log.Printf("Failed to delete local file %s: %v", filePath, err)
 	} else {
