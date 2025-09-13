@@ -126,14 +126,14 @@ func (chuck *ChunkUploader) Update(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid File Type")
 	}
 	if _, ok := chunkCache[userToken]; !ok {
+		if err := user.VerifyToken(userToken); err != nil {
+			log.Println("Error from third server ", err.Error())
+			return c.Status(fiber.StatusUnauthorized).SendString(err.Error())
+		}
 		if strings.ReplaceAll(objectKey, " ", "") != "" {
 			if err := chuck.DeleteFromCloud(c.Context(), objectKey); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "failed to replace file"})
 			}
-		}
-		if err := user.VerifyToken(userToken); err != nil {
-			log.Println("Error from third server ", err.Error())
-			return c.Status(fiber.StatusUnauthorized).SendString(err.Error())
 		}
 		baseOnCurrentTime := strconv.FormatInt(c.Context().Time().Unix(), 10)
 		uploadDir := fmt.Sprintf("./uploads/temp/%s/%s", baseOnCurrentTime, objectId)

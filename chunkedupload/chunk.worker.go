@@ -127,6 +127,7 @@ func (c *ChunkUploader) UploadToCloud(chunk types.ChunkCache) {
 				Progress:  1,
 				IsSuccess: false,
 			})
+			c.DeleteFromCloud(context.Background(), fmt.Sprintf("%s%s", bucketName, chunk.FileName))
 			break
 		}
 	}
